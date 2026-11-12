@@ -1,0 +1,29 @@
+# Supabase 무료 요금제는 일주일간 활동이 없으면 멈춥니다.
+# 주 2회(월·목 오전 9시 KST) 통계 함수를 한 번 불러 멈춤을 막습니다.
+# GitHub는 60일간 변화가 없는 공개 저장소의 예약 작업을 끄기 때문에, 매달 1회 기록 파일을 갱신합니다.
+name: keepalive
+on:
+  schedule:
+    - cron: "0 0 * * 1,4"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        run: |
+          curl -sf -X POST "https://tboodhrfzmldyuvrgfyd.supabase.co/rest/v1/rpc/pc_stats" \
+            -H "apikey: sb_publishable_XUxlTZ7zF6NLkNYaTVGnCg_cPKIuoB3" \
+            -H "Content-Type: application/json" -d '{}'
+      - uses: actions/checkout@v4
+      - name: Monthly heartbeat commit
+        run: |
+          M=$(date -u +%Y-%m)
+          if [ "$(cat .keepalive 2>/dev/null)" != "$M" ]; then
+            echo "$M" > .keepalive
+            git config user.name "peoplecow-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add .keepalive && git commit -m "keepalive $M" && git push
+          fi
