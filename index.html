@@ -123,6 +123,29 @@
   details.rules summary{cursor:pointer;font-weight:700;color:var(--brand)}
   details.rules ul{margin:8px 0 0;padding-left:18px;color:#3d4640}
   details.rules li{margin:4px 0}
+  /* v2.1: 첫 화면 · 공유 · 번개 */
+  .lead{font-size:15px;color:var(--sub);margin:0 0 2px}
+  .steps{display:grid;gap:8px;margin-top:14px}
+  .steps div{display:flex;gap:10px;align-items:flex-start;font-size:14px}
+  .steps b{flex:none;width:22px;height:22px;border-radius:50%;background:var(--brand-soft);color:var(--brand);
+    display:grid;place-items:center;font-size:12px}
+  .big{display:flex;gap:14px;align-items:center;text-align:left;width:100%;background:var(--brand);color:#fff;
+    border:0;border-radius:var(--radius);padding:20px 18px;margin-bottom:10px;cursor:pointer;font-family:inherit}
+  .big.alt{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .big .ic{font-size:28px;flex:none}
+  .big b{display:block;font-size:18px;letter-spacing:-.3px}
+  .big small{font-size:13px;opacity:.85}
+  .links{display:flex;flex-wrap:wrap;gap:4px 14px;justify-content:center;margin:14px 0 18px}
+  .links button,.links a{background:none;border:0;color:var(--brand);font-weight:600;font-size:14px;
+    cursor:pointer;padding:2px;font-family:inherit;text-decoration:none}
+  .hint{background:var(--brand-soft);border-radius:10px;padding:9px 12px;font-size:14px;color:#2a4a3c;margin:0 0 14px}
+  .share{background:#fff8ec;border:1px solid #f0d9b5;border-radius:var(--radius);padding:16px;margin-bottom:14px}
+  .share .btn.primary{background:var(--accent)}
+  .share .btn.primary:active{background:#a95f22}
+  .mask{font-size:26px;font-weight:800;letter-spacing:2px;font-family:ui-monospace,Menlo,Consolas,monospace;margin:6px 0}
+  .hours{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .hours .chip{text-align:center;padding:10px 0}
+  .warnline{color:var(--danger);font-size:13px;margin-top:8px}
 </style>
 </head>
 <body>
@@ -168,7 +191,14 @@ const ERR = {
   BAD_NICK:"닉네임은 1~12자로 적어 주세요.",
   NICK_TAKEN:"이 모임에 같은 닉네임이 이미 있습니다. 다른 닉네임을 써 주세요.",
   BAD_WORD:"이 닉네임은 쓸 수 없습니다. 다른 닉네임을 써 주세요.",
-  NICK_CONTACT:"전화번호·이메일처럼 보이는 닉네임은 쓸 수 없습니다."
+  NICK_CONTACT:"전화번호·이메일처럼 보이는 닉네임은 쓸 수 없습니다.",
+  NO_HOURS:"되는 시간을 하나 이상 골라 주세요.",
+  BAD_HOURS:"지금보다 뒤의 시간만 고를 수 있어요.",
+  TOO_MANY_PLACES:"장소 후보가 가득 찼어요.",
+  ALREADY_PROPOSED:"장소 제안은 한 사람당 한 번만 할 수 있어요.",
+  BAD_PLACE:"후보에 없는 장소입니다.",
+  USE_FLASH:"화면을 새로고침한 뒤 다시 시도해 주세요.",
+  NOT_FLASH:"화면을 새로고침한 뒤 다시 시도해 주세요."
 };
 
 /* ===================== ver2.0 시제품 설정 ===================== */
@@ -235,6 +265,57 @@ function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&l
 function toast(t){const el=document.getElementById("toast");el.textContent=t;el.classList.add("show");setTimeout(()=>el.classList.remove("show"),1800)}
 function copy(t){(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast("복사했어요"),()=>toast(t))}
 function joinLink(code){const here=location.href.split("?")[0].split("#")[0];return (here.startsWith("http")?here:SITE_URL)+"?code="+code}
+/* v2.1: 시간 표시 · 공유 · 고유코드 가림 */
+function hourText(h){return h<12?`오전 ${h===0?12:h}시`:`오후 ${h===12?12:h-12}시`}
+function shareText(title,kind){
+  return kind==="today"
+    ? `⚡ 오늘 번개 '${title}' — 링크 누르고 되는 시간만 찍어줘 (30초)`
+    : `'${title}' 날짜 정해요 — 링크 누르고 되는 날만 찍어줘 (30초)`;
+}
+// 공유에는 모임코드만 들어갑니다. 고유코드는 절대 넣지 않습니다.
+function doShare(code,title,kind){
+  const text=shareText(title,kind), url=joinLink(code);
+  if(navigator.share){ navigator.share({title:"피플카우",text,url}).catch(()=>{}); return }
+  copy(text+"\n"+url);
+  toast("복사했어요. 단톡방에 붙여넣기 하세요");
+}
+let SHARE={code:"",title:"",kind:"date"};
+function shareNow(){doShare(SHARE.code,SHARE.title,SHARE.kind)}
+function shareCard(code,title,kind){
+  SHARE={code,title,kind:kind||"date"};   // 제목에 따옴표가 있어도 안전하게 넘기기
+  return `
+  <div class="share">
+    <h2 style="margin-bottom:4px">${kind==="today"?"⚡ 번개 알리기":"📨 단톡방에 보내기"}</h2>
+    <p class="muted" style="margin-bottom:4px">문구와 링크만 공유됩니다. 화면 캡처는 필요 없어요.</p>
+    <button class="btn primary" onclick="shareNow()">카톡으로 보내기</button>
+    <div class="row" style="margin-top:8px">
+      <button class="btn small ghost" onclick="copy(joinLink('${code}'))">링크 복사</button>
+      <button class="btn small ghost" onclick="copy('${code}')">모임코드 복사</button>
+    </div>
+    <div id="qr"></div>
+    <p class="muted" style="text-align:center;font-size:12px">모임코드 ${code}</p>
+  </div>`;
+}
+let PID_SHOWN=false;
+function togglePid(){PID_SHOWN=!PID_SHOWN;const y=window.scrollY;render();window.scrollTo(0,y)}
+const myCodeCard=(pid,remembered)=>`
+  <div class="codebox warn">
+    <div class="lbl">내 고유코드 · 남에게 보내지 마세요</div>
+    <div class="${PID_SHOWN?"code":"mask"}">${PID_SHOWN?pid:"P-••••-••••"}</div>
+    <div class="row" style="justify-content:center">
+      <button class="btn small ghost" onclick="togglePid()">${PID_SHOWN?"가리기":"눌러서 보기"}</button>
+      <button class="btn small ghost" onclick="copy('${pid}')">코드 복사</button>
+    </div>
+    <p class="muted" style="margin-top:8px">응답을 고치거나 다른 모임에 참여할 때, 모임을 확정할 때 필요합니다.${remembered?" <b>이 기기에 기억해 두었어요.</b>":""}</p>
+    <details class="rules" style="text-align:left;margin-top:10px"><summary>고유코드를 잃어버리면?</summary>
+      <ul>
+        <li>고유코드는 <b>다시 찾아드릴 수 없습니다.</b> 캡처하거나 메모해 두세요.</li>
+        <li>"이 기기에 기억하기"를 켜면 같은 기기·브라우저에서 자동으로 채워집니다.</li>
+        <li>잃어버리면 다른 닉네임으로 새로 참여하면 됩니다. 이전 응답은 고칠 수 없습니다.</li>
+        <li>모임을 만든 사람이 잃어버리면 확정을 할 수 없으니, 모임을 새로 만들어 주세요.</li>
+      </ul>
+    </details>
+  </div>`;
 async function busy(btn,errEl,fn){
   if(errEl)errEl.textContent="";
   const t=btn.textContent;btn.disabled=true;btn.textContent="잠시만요…";
@@ -283,13 +364,23 @@ PAGES.home=()=>{
   const st=S.stats||{active:"-",total:"-",month_responses:"-"};
   return `
   <div class="card">
-    <h1>모임 날짜, 한 번에 정해요</h1>
-    <p class="muted">참석 가능한 날짜를 모으면 가능 인원이 가장 많은 날이 보입니다. 가입은 필요 없습니다. <a href="guide" style="font-weight:600">📖 사용 방법</a></p>
+    <h1>단톡방 날짜 투표, 링크 하나로 끝내요</h1>
+    <p class="lead">가입 없이, 이메일·전화번호 없이.</p>
+    <div class="steps">
+      <div><b>1</b><span>총무가 약속을 만들어요</span></div>
+      <div><b>2</b><span>링크를 단톡방에 보내요</span></div>
+      <div><b>3</b><span>다들 되는 날만 찍으면 날짜가 나와요</span></div>
+    </div>
   </div>
-  <button class="choice" onclick="go('create1')"><div class="ic">✍️</div><div><b>약속을 처음 만들어요</b><small>모임코드와 QR을 받아 멤버에게 나눠줍니다</small></div></button>
-  <button class="choice" onclick="go('join1')"><div class="ic">🙋</div><div><b>만들어진 약속에 참여해요</b><small>받은 모임코드를 넣고 가능한 날짜를 고릅니다</small></div></button>
-  <button class="choice" onclick="go('view')"><div class="ic">📊</div><div><b>모임 결과 보기</b><small>모임코드와 내 고유코드를 넣으면 날짜별 참석 가능 인원이 보입니다</small></div></button>
-  <button class="choice" onclick="go('rank')"><div class="ic">🏆</div><div><b>닉네임 순위 · 내 워낭</b><small>많이 쓰인 닉네임 순위와 내 워낭(활동 등급)을 봅니다</small></div></button>
+  <button class="big" onclick="go('pick')"><div class="ic">✍️</div><div><b>약속 만들기</b><small>날짜 잡기 · 오늘 번개</small></div></button>
+  <button class="big alt" onclick="go('join1')"><div class="ic">🙋</div><div><b>초대받았어요</b><small>모임코드를 받았다면 여기로</small></div></button>
+  <div class="links">
+    <button onclick="go('view')">결과 보기</button>
+    <button onclick="go('mine0')">내 참여 기록</button>
+    <button onclick="go('rank')">순위</button>
+    <button onclick="go('rank')">내 워낭</button>
+    <a href="guide">사용 방법</a>
+  </div>
   <div class="card">
     <h2>피플카우 전체 현황</h2>
     <div class="stats">
@@ -299,17 +390,29 @@ PAGES.home=()=>{
     </div>
     <p class="muted" style="margin-top:10px">모임별 결과는 모임코드를 입력한 사람만 볼 수 있습니다.</p>
   </div>
-  <div class="card">
-    <h2>내 참여 기록</h2>
-    <p class="muted">고유코드를 넣으면 내가 참여한 모임만 보입니다.</p>
-    <label class="f">고유코드</label><input type="text" id="mPid" placeholder="P-XXXX-XXXX" autocapitalize="characters" value="${esc(savedPid())}">
-    <div class="err" id="mErr"></div>
-    <button class="btn ghost" id="mBtn" onclick="lookupMine(this)">내 기록 보기</button>
-    ${savedPid()?`<p style="margin-top:10px;text-align:right"><button class="linkish" onclick="forgetPid()">이 기기에서 코드 지우기</button></p>`:""}
-    ${lostNotice()}
-  </div>
   <div style="text-align:center"><button class="linkish" onclick="load('archive',{},async()=>({rows:await rpc('pc_archive')}))">지난 모임 통계 (연도·월별) →</button></div>`;
 };
+
+/* ===================== 종류 고르기 (v2.1) ===================== */
+PAGES.pick=()=>`
+  <div class="card">
+    <h2>어떤 약속인가요?</h2>
+    <p class="hint">날짜가 아직 안 정해졌으면 날짜 잡기, 오늘 만날 거면 번개</p>
+    <button class="choice" onclick="go('create1')"><div class="ic">📅</div><div><b>날짜 잡기</b><small>두 달 안에서 다 같이 되는 날을 찾습니다</small></div></button>
+    <button class="choice" onclick="go('flash1')" style="margin-bottom:0"><div class="ic">⚡</div><div><b>오늘 번개</b><small>오늘 몇 시에 어디서 만날지 정합니다</small></div></button>
+  </div>`;
+
+/* ===================== 내 참여 기록 입력 (v2.1) ===================== */
+PAGES.mine0=()=>`
+  <div class="card">
+    <h2>내 참여 기록</h2>
+    <p class="hint">고유코드를 넣으면 내가 참여한 모임만 보입니다</p>
+    <label class="f">고유코드</label><input type="text" id="mPid" placeholder="P-XXXX-XXXX" autocapitalize="characters" value="${esc(CUR_PID||savedPid())}">
+    <div class="err" id="mErr"></div>
+    <button class="btn primary" id="mBtn" onclick="lookupMine(this)">내 기록 보기</button>
+    ${savedPid()?`<p style="margin-top:10px;text-align:right"><button class="linkish" onclick="forgetPid()">이 기기에서 코드 지우기</button></p>`:""}
+    ${lostNotice()}
+  </div>`;
 AFTER.home=()=>{ if(!S.stats) rpc("pc_stats").then(st=>{if(S.page==="home"){S.stats=st;render()}}).catch(()=>{}); };
 
 /* ===================== 만들기 1 ===================== */
@@ -320,6 +423,7 @@ PAGES.create1=()=>{
   return `
   <div class="card">
     <h2>1. 언제쯤 모일까요?</h2>
+    <p class="hint">총무도 한 표! 내가 되는 날부터 찍어요</p>
     <p class="muted">연도와 월을 고르면 그 달과 다음 달, 두 달이 후보가 됩니다.</p>
     <div class="row">
       <div><label class="f">연도</label><select id="cy">${years.map(v=>`<option ${v===y?"selected":""}>${v}</option>`).join("")}</select></div>
@@ -355,6 +459,7 @@ function create1Next(btn){
 PAGES.join1=()=>`
   <div class="card">
     <h2>모임코드를 넣어 주세요</h2>
+    <p class="hint">① 닉네임 ② 되는 날 ③ 제출 (30초)</p>
     <p class="muted">모임을 만든 사람에게 받은 코드나 QR로 들어옵니다.</p>
     <label class="f">모임코드</label><input type="text" id="jc" placeholder="26-XXXXXX" autocapitalize="characters" value="${esc(S.code||"")}">
     <label class="f">내 닉네임 <span class="muted">(멤버에게 보임, 실명 대신 별명 권장)</span></label>
@@ -374,6 +479,13 @@ function join1Next(btn){
     const p=r.prev;
     if(!nick&&p) nick=p.nickname;
     if(!nick) throw new Error("닉네임을 적어 주세요.");
+    if(r.kind==="today"){   // v2.1: 번개 모임이면 번개 응답 화면으로
+      go("fanswer",{code:r.code,mt:{title:r.title,kind:"today"},nick,pidIn,remember,edit:!!p,
+        times:r.times||[],places:r.places||[],
+        hsel:new Set(p?p.hours:[]),psel:new Set(p?p.place_votes:[]),
+        proposed:p?p.proposed:"",memo:p?p.memo:""});
+      return;
+    }
     go("answer",{mode:"join",code:r.code,mt:{title:r.title,y:r.y,m:r.m},nick,pidIn,remember,isNew:r.is_new,edit:!!p,
       sel:new Set(p?p.dates:[]),regions:new Set(p?p.regions:[]),foods:new Set(p?p.foods:[]),avoid:new Set(p?p.avoid:[]),
       place:p?p.place:"",memo:p?p.memo:""});
@@ -439,27 +551,26 @@ function submitAnswer(btn){
 }
 
 /* ===================== 완료 ===================== */
-PAGES.done=()=>`
+PAGES.done=()=>{
+  const flash=S.mt&&S.mt.kind==="today";
+  return `
   <div class="card">
-    <h2>${S.mode==="create"?"모임이 만들어졌어요":"응답을 받았어요"}</h2>
-    ${S.issued?`<div class="codebox warn"><div class="lbl">내 고유코드 · 이 화면에서만 한 번 보여드립니다</div><div class="code">${S.issued}</div>
-      <p class="muted">응답을 고치거나 다른 모임에 참여할 때, 모임을 확정할 때 필요합니다. ${S.remembered?"<b>이 기기에 기억해 두었어요.</b>":""}</p>
-      <button class="btn small ghost" style="margin-top:8px" onclick="copy('${S.issued}')">고유코드 복사</button></div>${lostNotice()}`:""}
-    ${S.mode==="create"?`
-      <div class="codebox"><div class="lbl">모임코드 · 멤버에게 나눠주세요</div><div class="code">${S.code}</div>
-        <div id="qr"></div>
-        <div class="row" style="margin-top:6px"><button class="btn small ghost" onclick="copy('${S.code}')">코드 복사</button><button class="btn small ghost" onclick="copy(joinLink('${S.code}'))">참여 링크 복사</button></div>
-      </div>
-      <p class="muted">${esc(S.mt.title)} · 확정하지 않으면 ${ymd(lastDayOfPair(S.mt.y,S.mt.m))} 다음날 자동으로 끝납니다.</p>`:""}
-    <button class="btn primary" onclick="openResult('${S.code}')">모임 결과 보기</button>
-    <button class="btn ghost" onclick="go('home')">처음으로</button>
-  </div>`;
-AFTER.done=()=>{
-  if(S.mode!=="create")return;
-  const el=document.getElementById("qr");
-  if(window.QRCode) new QRCode(el,{text:joinLink(S.code),width:160,height:160,correctLevel:QRCode.CorrectLevel.M});
-  else el.innerHTML='<p class="muted">QR은 인터넷 연결 시 표시됩니다.</p>';
+    <h2>${S.mode==="create"?(flash?"⚡ 번개가 만들어졌어요":"모임이 만들어졌어요"):"응답을 받았어요"}</h2>
+    <p class="muted">${esc(S.mt?S.mt.title:"")}${S.mode==="create"?(flash?" · 오늘 자정이 지나면 끝납니다.":" · 확정하지 않으면 "+ymd(lastDayOfPair(S.mt.y,S.mt.m))+" 다음날 자동으로 끝납니다."):""}</p>
+  </div>
+  ${shareCard(S.code,S.mt.title,flash?"today":"date")}
+  ${S.issued?myCodeCard(S.issued,S.remembered):""}
+  <button class="btn primary" onclick="openResult('${S.code}')">${flash?"번개 현황 보기":"모임 결과 보기"}</button>
+  <button class="btn ghost" onclick="go('home')">처음으로</button>`;
 };
+AFTER.done=()=>{ drawQR(S.code) };
+function drawQR(code){
+  const el=document.getElementById("qr");
+  if(!el)return;
+  if(!code){el.remove();return}
+  if(window.QRCode) new QRCode(el,{text:joinLink(code),width:140,height:140,correctLevel:QRCode.CorrectLevel.M});
+  else el.innerHTML='<p class="muted">QR은 인터넷 연결 시 표시됩니다.</p>';
+}
 
 /* ===================== 결과 ===================== */
 function openResult(code,pid){
@@ -487,7 +598,9 @@ PAGES.view=()=>`
     <button class="btn ghost" onclick="go('join1',{code:cleanMeetingCode(vc.value)})">아직 응답 전이에요 → 응답하기</button>
   </div>`;
 PAGES.result=()=>{
-  const r=S.r,n=r.n,max=r.dates.length?r.dates[0][1]:0;
+  const r=S.r;
+  if(r.kind==="today") return flashResult(r);
+  const n=r.n,max=r.dates.length?r.dates[0][1]:0;
   const bars=(arr,isDate)=>arr.map(([k,v])=>`<div class="bar ${isDate&&v===max?"top":""}"><span>${esc(isDate?label(k):k)}</span><div class="t"><i style="width:${n?Math.round(v/n*100):0}%"></i></div><span class="n">${v}명</span></div>`).join("")||'<p class="muted">아직 없음</p>';
   const chips=arr=>arr.length?`<div class="chips">${arr.map(([k,v])=>`<span class="chip">${esc(k)} ${v}</span>`).join("")}</div>`:'<p class="muted">없음</p>';
   const [a,b]=monthPair(r.y,r.m);
@@ -495,10 +608,12 @@ PAGES.result=()=>{
   <div class="card">
     <p style="margin:0 0 6px"><span class="pill ${r.ended?"done":""}">${r.ended?"끝난 모임":"진행 중"}</span> <span class="muted">${r.code}</span></p>
     <h2 style="margin-bottom:4px">${esc(r.title)}</h2>
+    <p class="hint" style="margin:8px 0">가장 많이 되는 날이 맨 위</p>
     <p class="muted">응답 ${n}명 · 후보 ${a.m}월·${b.m}월</p>
     ${r.names&&r.names.length?`<div class="names">${r.names.map(x=>`<span class="chip">${esc(x)}</span>`).join("")}</div>`:""}
   </div>
   ${r.confirmed?`<div class="confirmed">📌 확정된 날짜: ${label(r.confirmed)}</div>`:""}
+  ${!r.ended?shareCard(r.code,r.title,"date"):""}
   <div class="card">
     <h2>날짜별 가능 인원</h2>
     <p class="muted" style="margin-bottom:8px">주황색이 가능 인원이 가장 많은 날입니다. 상위 10일만 표시합니다.</p>
@@ -515,6 +630,7 @@ PAGES.result=()=>{
   </div>
   ${!r.ended&&r.dates.length&&r.is_creator?`<div class="card">
     <h2>날짜 확정 <span class="muted" style="font-size:13px;font-weight:500">(모임 만든 사람에게만 보임)</span></h2>
+    <p class="hint">확정하면 모두의 결과 화면에 표시돼요</p>
     <label class="f">확정할 날짜</label>
     <select id="rD">${r.dates.filter(([k])=>parseYmd(k)>=TODAY).map(([k,v])=>`<option value="${k}" ${r.confirmed===k?"selected":""}>${label(k)} · ${v}명</option>`).join("")}</select>
     <div class="err" id="rErr"></div>
@@ -524,6 +640,7 @@ PAGES.result=()=>{
   ${!r.ended?`<button class="btn ghost" onclick="go('join1',{code:'${r.code}'})">이 모임에 응답하기 / 고치기</button>`:""}
   <button class="btn ghost" onclick="go('home')">처음으로</button>`;
 };
+AFTER.result=()=>{ drawQR(S.r.ended?null:S.r.code) };
 function confirmDate(btn){
   busy(btn,rErr,async()=>{
     await rpc("pc_confirm",{p_code:S.code,p_pid:S.vpid,p_date:rD.value});
@@ -541,9 +658,11 @@ PAGES.mine=()=>`<div class="card">
     <h2>내 참여 기록</h2>
     <p class="muted">${S.pid}</p>
     ${S.rows.map(r=>`<div class="list-item">
-      <b>${esc(r.title)}</b> <span class="pill ${r.ended?"done":""}">${r.ended?"끝남":"진행 중"}</span>${r.is_creator?' <span class="pill">내가 만든 모임</span>':""}<br>
-      <span class="muted">${r.code} · 닉네임 ${esc(r.nickname)} · 내가 고른 날짜: ${r.dates.map(label).join(", ")}</span>
-      ${r.confirmed?`<br><span class="muted">확정: ${label(r.confirmed)}</span>`:""}
+      <b>${esc(r.title)}</b> <span class="pill ${r.ended?"done":""}">${r.ended?"끝남":"진행 중"}</span>${r.kind==="today"?' <span class="pill">⚡ 번개</span>':""}${r.is_creator?' <span class="pill">내가 만든 모임</span>':""}<br>
+      <span class="muted">${r.code} · 닉네임 ${esc(r.nickname)} · ${r.kind==="today"?"내가 고른 시간: "+(r.hours&&r.hours.length?r.hours.map(hourText).join(", "):"없음"):"내가 고른 날짜: "+r.dates.map(label).join(", ")}</span>
+      ${r.kind==="today"
+        ? (r.confirmed_hour!==null&&r.confirmed_hour!==undefined?`<br><span class="muted">확정: ${hourText(r.confirmed_hour)}${r.confirmed_place?" · "+esc(r.confirmed_place):""}</span>`:"")
+        : (r.confirmed?`<br><span class="muted">확정: ${label(r.confirmed)}</span>`:"")}
       <div style="margin-top:8px"><button class="btn small ghost" onclick="openResult('${r.code}','${S.pid}')">결과 보기</button></div></div>`).join("")||'<p class="muted">참여한 모임이 없습니다.</p>'}
   </div><button class="btn ghost" onclick="go('home')">처음으로</button>`;
 
@@ -553,6 +672,168 @@ PAGES.archive=()=>`<div class="card">
     <p class="muted" style="margin-bottom:8px">모임 이름과 코드 없이 연도·월별 숫자만 남깁니다.</p>
     ${S.rows.map(x=>`<div class="list-item"><b>${x.ym.slice(0,4)}년 ${+x.ym.slice(5)}월</b><br><span class="muted">모임 ${x.meetings}개 · 응답 ${x.responses}명 · 날짜 확정 ${x.confirmed}개</span></div>`).join("")||'<p class="muted">아직 끝난 모임이 없습니다.</p>'}
   </div><button class="btn ghost" onclick="go('home')">처음으로</button>`;
+
+/* ===================== ver2.1: ⚡ 오늘 번개 ===================== */
+function laterHours(){const h=new Date().getHours();const out=[];for(let x=h+1;x<=23;x++)out.push(x);return out}
+function hoursChips(list,set){return `<div class="hours" id="fH">${list.map(h=>`<button class="chip ${set.has(h)?"on":""}" data-h="${h}">${hourText(h)}</button>`).join("")}</div>`}
+
+PAGES.flash1=()=>{
+  const hs=laterHours();
+  if(!S.hsel) S.hsel=new Set();
+  if(!hs.length) return `<div class="card">
+    <h2>⚡ 오늘 번개</h2>
+    <p class="err" style="margin-top:8px">오늘은 남은 시간이 없어요. 날짜 잡기를 이용해 주세요.</p>
+    <button class="btn primary" onclick="go('create1')">날짜 잡기로 가기</button>
+    <button class="btn ghost" onclick="go('home')">처음으로</button>
+  </div>`;
+  return `
+  <div class="card">
+    <h2>⚡ 오늘 번개</h2>
+    <p class="hint">오늘 만날 시간과 장소를 투표로 정해요. 링크만 보내면 끝!</p>
+    <label class="f">모임 이름 <span class="muted">(코드를 가진 사람에게만 보임)</span></label>
+    <input type="text" id="ft" placeholder="예: 퇴근 후 한잔" maxlength="30" value="${esc(S.ftitle||"")}">
+    <label class="f">내 닉네임 <span class="muted">(멤버에게 보임, 실명 대신 별명 권장)</span></label>
+    <input type="text" id="fn" placeholder="예: 총무" maxlength="12" value="${esc(S.fnick||"")}">
+    ${pidField("fp","fRem")}
+    <h3>1) 시간 후보 <span class="muted">(여러 개, 최대 12개)</span></h3>
+    <p class="muted" style="margin-bottom:8px">지금보다 뒤의 시간만 고를 수 있어요. 고른 시간은 <b>총무도 모두 가능</b>으로 들어갑니다.</p>
+    ${hoursChips(hs,S.hsel)}
+    <h3>2) 장소 후보 <span class="muted">(선택, 최대 3개)</span></h3>
+    <p class="muted" style="margin-bottom:8px">비워두면 멤버가 제안할 수 있어요. 멤버는 한 사람당 한 곳까지 제안합니다.</p>
+    <input type="text" id="fp1" maxlength="20" placeholder="예: 마포" value="${esc(S.p1||"")}" style="margin-bottom:8px">
+    <input type="text" id="fp2" maxlength="20" placeholder="예: 합정" value="${esc(S.p2||"")}" style="margin-bottom:8px">
+    <input type="text" id="fp3" maxlength="20" placeholder="예: 홍대" value="${esc(S.p3||"")}">
+    <label class="f">메모 <span class="muted">(선택)</span></label>
+    <textarea id="fm" maxlength="200" placeholder="예: 가볍게 한두 시간만">${esc(S.fmemo||"")}</textarea>
+    <div class="err" id="fErr"></div>
+    <button class="btn primary" onclick="createFlash(this)">번개 만들고 링크 받기</button>
+  </div>`;
+};
+function keepFlash(){
+  const g=id=>{const el=document.getElementById(id);return el?el.value:""};
+  S.ftitle=g("ft");S.fnick=g("fn");S.pidIn=g("fp");S.p1=g("fp1");S.p2=g("fp2");S.p3=g("fp3");S.fmemo=g("fm");
+  const rem=document.getElementById("fRem"); if(rem) S.remember=rem.checked;
+  const y=window.scrollY;render();window.scrollTo(0,y);
+}
+AFTER.flash1=()=>{
+  document.querySelectorAll("#fH .chip").forEach(el=>el.onclick=()=>{
+    const h=+el.dataset.h; S.hsel.has(h)?S.hsel.delete(h):S.hsel.add(h); keepFlash();
+  });
+};
+function createFlash(btn){
+  keepFlashQuiet();
+  const title=(S.ftitle||"").trim(), nick=(S.fnick||"").trim();
+  if(!title) return fErr.textContent="모임 이름을 적어 주세요.";
+  if(nickProblem(nick)) return fErr.textContent=nickProblem(nick);
+  const hours=[...S.hsel].sort((a,b)=>a-b);
+  if(!hours.length) return fErr.textContent=ERR.NO_HOURS;
+  if(hours.length>12) return fErr.textContent="시간 후보는 12개까지 고를 수 있어요.";
+  const places=[S.p1,S.p2,S.p3].map(x=>(x||"").trim()).filter(Boolean);
+  busy(btn,fErr,async()=>{
+    const r=await rpc("pc_create_flash",{p_title:title,p_nickname:nick,p_pid:cleanPid(S.pidIn||""),
+      p_hours:hours,p_places:places,p_my_hours:[],p_my_places:[],p_memo:(S.fmemo||"").trim()});
+    CUR_PID=r.pid; if(S.remember!==false) rememberPid(r.pid);
+    go("done",{mode:"create",code:r.code,issued:r.issued?r.pid:null,remembered:S.remember!==false,mt:{title,kind:"today"}});
+  });
+}
+function keepFlashQuiet(){
+  const g=id=>{const el=document.getElementById(id);return el?el.value:""};
+  S.ftitle=g("ft");S.fnick=g("fn");S.pidIn=g("fp");S.p1=g("fp1");S.p2=g("fp2");S.p3=g("fp3");S.fmemo=g("fm");
+  const rem=document.getElementById("fRem"); if(rem) S.remember=rem.checked;
+}
+
+/* 번개 응답 */
+PAGES.fanswer=()=>`
+  <div class="card">
+    <h2>⚡ ${esc(S.mt.title)}</h2>
+    <p class="hint">① 닉네임 ② 되는 시간 ③ 장소 (30초)</p>
+    <p class="muted">닉네임 <b>${esc(S.nick)}</b> ${S.edit?"· <b>전에 낸 응답을 고칩니다.</b>":""}</p>
+    <h3>되는 시간 <span class="muted">(여러 개)</span></h3>
+    ${hoursChips(S.times,S.hsel)}
+    ${S.places.length?`<h3>장소 <span class="muted">(여러 개, 선택)</span></h3>
+      <div class="chips" id="fP">${S.places.map(v=>`<button class="chip ${S.psel.has(v)?"on":""}" data-v="${esc(v)}">${esc(v)}</button>`).join("")}</div>`:""}
+    ${S.proposed
+      ? `<p class="muted" style="margin-top:10px">내가 제안한 장소: <b>${esc(S.proposed)}</b> <span style="font-size:12px">(한 사람당 한 곳까지)</span></p>`
+      : `<label class="f">다른 곳 제안 <span class="muted">(선택, 한 사람당 한 곳)</span></label>
+         <input type="text" id="fNew" maxlength="20" placeholder="예: 연남동" value="${esc(S.newPlace||"")}">`}
+    <label class="f">메모 <span class="muted">(선택)</span></label>
+    <textarea id="fam" maxlength="200">${esc(S.memo||"")}</textarea>
+    <div class="err" id="faErr"></div>
+    <button class="btn primary" onclick="submitFlash(this)">${S.edit?"응답 고치기":"제출하기"}</button>
+    <button class="btn ghost" onclick="go('join1',{code:'${S.code}'})">이전</button>
+  </div>`;
+function keepFlashAnswer(){
+  const n=document.getElementById("fNew"), m=document.getElementById("fam");
+  if(n)S.newPlace=n.value; if(m)S.memo=m.value;
+  const y=window.scrollY;render();window.scrollTo(0,y);
+}
+AFTER.fanswer=()=>{
+  document.querySelectorAll("#fH .chip").forEach(el=>el.onclick=()=>{
+    const h=+el.dataset.h; S.hsel.has(h)?S.hsel.delete(h):S.hsel.add(h); keepFlashAnswer();
+  });
+  document.querySelectorAll("#fP .chip").forEach(el=>el.onclick=()=>{
+    const v=el.dataset.v; S.psel.has(v)?S.psel.delete(v):S.psel.add(v); keepFlashAnswer();
+  });
+};
+function submitFlash(btn){
+  const n=document.getElementById("fNew"), m=document.getElementById("fam");
+  if(n)S.newPlace=n.value; if(m)S.memo=m.value;
+  const hours=[...S.hsel].sort((a,b)=>a-b);
+  if(!hours.length) return faErr.textContent=ERR.NO_HOURS;
+  busy(btn,faErr,async()=>{
+    const r=await rpc("pc_submit_flash",{p_code:S.code,p_nickname:S.nick,p_pid:cleanPid(S.pidIn||""),
+      p_hours:hours,p_places:[...S.psel],p_new_place:(S.newPlace||"").trim(),p_memo:(S.memo||"").trim()});
+    CUR_PID=r.pid; if(S.remember) rememberPid(r.pid);
+    go("done",{mode:"join",code:r.code,issued:r.issued?r.pid:null,remembered:!!S.remember,mt:{title:S.mt.title,kind:"today"}});
+  });
+}
+
+/* 번개 결과 */
+function flashResult(r){
+  const n=r.n;
+  const bar=(k,v,top)=>`<div class="bar ${top?"top":""}"><span>${esc(k)}</span><div class="t"><i style="width:${n?Math.round(v/n*100):0}%"></i></div><span class="n">${v}명</span></div>`;
+  const maxH=r.hours.length?Math.max(...r.hours.map(x=>x[1])):0;
+  const maxP=r.place_tally.length?Math.max(...r.place_tally.map(x=>x[1])):0;
+  return `
+  <div class="card">
+    <p style="margin:0 0 6px"><span class="pill ${r.ended?"done":""}">${r.ended?"끝난 번개":"⚡ 오늘 번개"}</span> <span class="muted">${r.code}</span></p>
+    <h2 style="margin-bottom:4px">${esc(r.title)}</h2>
+    <p class="hint" style="margin:8px 0">가장 많이 되는 시간이 맨 위</p>
+    <p class="muted">응답 ${n}명</p>
+    ${r.names&&r.names.length?`<div class="names">${r.names.map(x=>`<span class="chip">${esc(x)}</span>`).join("")}</div>`:""}
+  </div>
+  ${r.confirmed_hour!==null&&r.confirmed_hour!==undefined
+    ? `<div class="confirmed">📌 오늘 ${hourText(r.confirmed_hour)}${r.confirmed_place?" · "+esc(r.confirmed_place):""} 확정</div>`:""}
+  ${!r.ended?shareCard(r.code,r.title,"today"):""}
+  <div class="card">
+    <h2>시간별 가능 인원</h2>
+    ${r.hours.map(([h,v])=>bar(hourText(h),v,v===maxH&&v>0)).join("")||'<p class="muted">아직 없음</p>'}
+  </div>
+  <div class="card">
+    <h2>장소별 가능 인원</h2>
+    ${r.place_tally.map(([p,v])=>bar(p,v,v===maxP&&v>0)).join("")||'<p class="muted">아직 장소 후보가 없습니다. 멤버가 제안할 수 있어요.</p>'}
+    ${r.memos.length?`<h3>메모</h3><p class="muted">${r.memos.map(esc).join("<br>")}</p>`:""}
+  </div>
+  ${!r.ended&&r.is_creator?`<div class="card">
+    <h2>확정 <span class="muted" style="font-size:13px;font-weight:500">(번개를 만든 사람에게만 보임)</span></h2>
+    <p class="hint">확정하면 모두의 결과 화면에 표시돼요</p>
+    <label class="f">시간</label>
+    <select id="fcH">${r.hours.map(([h,v])=>`<option value="${h}" ${r.confirmed_hour===h?"selected":""}>${hourText(h)} · ${v}명</option>`).join("")}</select>
+    ${r.place_tally.length?`<label class="f">장소 <span class="muted">(선택)</span></label>
+      <select id="fcP"><option value="">정하지 않음</option>${r.place_tally.map(([p,v])=>`<option value="${esc(p)}" ${r.confirmed_place===p?"selected":""}>${esc(p)} · ${v}명</option>`).join("")}</select>`:""}
+    <div class="err" id="fcErr"></div>
+    <button class="btn primary" onclick="confirmFlash(this)">이 시간으로 확정</button>
+  </div>`:""}
+  ${!r.ended?`<button class="btn ghost" onclick="go('join1',{code:'${r.code}'})">이 번개에 응답하기 / 고치기</button>`:""}
+  <button class="btn ghost" onclick="go('home')">처음으로</button>`;
+}
+function confirmFlash(btn){
+  const pl=document.getElementById("fcP");
+  busy(btn,fcErr,async()=>{
+    await rpc("pc_confirm_flash",{p_code:S.code,p_pid:S.vpid,p_hour:+fcH.value,p_place:pl?pl.value:""});
+    toast("확정했어요");openResult(S.code,S.vpid);
+  });
+}
 
 /* ===================== ver2.0: 닉네임 순위 · 내 워낭 ===================== */
 const PERIODS=[["day","일"],["month","월"],["year","연"]];
