@@ -90,6 +90,8 @@
   .list-item:first-child{border-top:0}
   .confirmed{background:#fff3e6;border:1px solid #f0cfa8;border-radius:12px;padding:12px;margin-bottom:12px;font-weight:700}
   footer{font-size:12px;color:var(--sub);margin-top:22px;line-height:1.6}
+  footer a{color:var(--brand);font-weight:700;text-decoration:none}
+  .nb{white-space:nowrap}
   .linkish{background:none;border:0;color:var(--brand);font-weight:700;cursor:pointer;padding:0;font-family:inherit;font-size:14px}
   .hidden{display:none}
   .notice{background:#fff8ec;border:1px solid #f0d9b5;border-radius:12px;padding:12px 14px;margin-top:12px;font-size:13px;color:#5c4a33}
@@ -156,8 +158,7 @@
   </header>
   <main id="app"></main>
   <footer id="foot">
-    <b>개인정보 안내</b> · 이메일·전화번호는 받지 않습니다. 저장 항목: 닉네임, 가능 날짜, 선호 지역·장소, 못 먹는 음식, 꺼리는 장소, 기타 요청. 이용 목적: 모임 날짜 조율.
-    닉네임은 실명 대신 별명을 권장합니다. 닉네임 순위에는 닉네임과 쓰인 횟수만 공개되고(5명 미만이 쓴 닉네임은 앞 글자만), 누가 썼는지는 공개하지 않습니다. 보관 기간: 모임이 끝나고 3개월이 지나면 개별 응답을 지우고 날짜별 인원 통계만 남깁니다. 문의: peoplecow.help@gmail.com
+    <span class="nb">이메일·전화번호는 받지 않습니다</span> · <a class="nb" href="privacy.html">개인정보 안내 →</a>
     <div style="margin-top:10px">© 2026 peoplecow · 나는 총무다</div>
   </footer>
 </div>
@@ -198,7 +199,9 @@ const ERR = {
   ALREADY_PROPOSED:"장소 제안은 한 사람당 한 번만 할 수 있어요.",
   BAD_PLACE:"후보에 없는 장소입니다.",
   USE_FLASH:"화면을 새로고침한 뒤 다시 시도해 주세요.",
-  NOT_FLASH:"화면을 새로고침한 뒤 다시 시도해 주세요."
+  NOT_FLASH:"화면을 새로고침한 뒤 다시 시도해 주세요.",
+  TOO_FAST:"요청이 너무 많아요. 잠시 뒤에 다시 해 주세요.",
+  BUSY_TODAY:"오늘은 이용이 많아 잠시 쉬어요. 내일 다시 이용해 주세요."
 };
 
 /* ===================== ver2.0 시제품 설정 ===================== */
@@ -237,6 +240,11 @@ async function mockRpc(fn,args){
   return null;
 }
 
+/* [ver2.2] 모임코드가 들어간 주소는 검색에 담기지 않게 */
+if(location.search.indexOf("code=")>-1){
+  const mt=document.createElement("meta");mt.name="robots";mt.content="noindex,nofollow";document.head.appendChild(mt);
+}
+
 /* ===================== 서버 호출 ===================== */
 async function rpc(fn,args={}){
   if(MOCK&&["pc_rank","pc_points"].includes(fn)) return mockRpc(fn,args);
@@ -247,6 +255,8 @@ async function rpc(fn,args={}){
   }catch(e){throw new Error("인터넷 연결을 확인해 주세요.")}
   const body=await res.json().catch(()=>null);
   if(!res.ok){const k=(body&&body.message)||"";throw new Error(ERR[k]||"잠시 후 다시 시도해 주세요. ("+(k||res.status)+")")}
+  // [ver2.2] 없는 모임코드·횟수 초과는 정상 응답에 error 키로 옵니다
+  if(body&&typeof body==="object"&&body.error){const k=String(body.error);throw new Error(ERR[k]||"잠시 후 다시 시도해 주세요. ("+k+")")}
   return body;
 }
 
@@ -338,6 +348,10 @@ const pidField=(id,remId)=>{const sp=savedPid();return `
     ${sp?`<p class="muted" style="margin-top:4px">이 기기에 기억된 코드가 채워졌어요.</p>`:""}
     <label class="check"><input type="checkbox" id="${remId}" ${S.remember===false?"":"checked"}> 이 기기에 고유코드 기억하기</label>`};
 
+/* [ver2.2] 허니팟 — 사람에게는 보이지 않는 칸. 자동 프로그램이 채우면 서버를 부르지 않습니다 */
+const hpField=(id)=>`<input type="text" id="${id}" name="company_website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none">`;
+function hpFilled(id){const el=document.getElementById(id);return !!(el&&el.value.trim())}
+
 /* ===================== 라우팅 ===================== */
 let S={};
 const PAGES={},AFTER={};
@@ -394,6 +408,14 @@ PAGES.home=()=>{
 };
 
 /* ===================== 종류 고르기 (v2.1) ===================== */
+// [ver2.2] 허니팟에 걸렸을 때 보여주는 가짜 완료 화면(서버를 부르지 않음)
+PAGES.fakedone=()=>`
+  <div class="card">
+    <h2>접수되었습니다</h2>
+    <p class="muted">잠시 뒤에 다시 확인해 주세요.</p>
+  </div>
+  <button class="btn ghost" onclick="go('home')">처음으로</button>`;
+
 PAGES.pick=()=>`
   <div class="card">
     <h2>어떤 약속인가요?</h2>
@@ -435,6 +457,7 @@ PAGES.create1=()=>{
     <label class="f">내 닉네임 <span class="muted">(멤버에게 보임, 실명 대신 별명 권장)</span></label>
     <input type="text" id="cn" placeholder="예: 총무" maxlength="12" value="${esc(S.nick||"")}">
     ${pidField("cp","cRem")}
+    ${hpField("chp")}
     <div class="err" id="cErr"></div>
     <button class="btn primary" onclick="create1Next(this)">다음: 내 가능 날짜 고르기</button>
   </div>`;
@@ -444,6 +467,7 @@ AFTER.create1=()=>{
   cy.onchange=upd;cm.onchange=upd;
 };
 function create1Next(btn){
+  if(hpFilled("chp")) return go("fakedone");                                  // [ver2.2]
   const title=ct.value.trim(),nick=cn.value.trim(),pidIn=cleanPid(cp.value.trim()),remember=cRem.checked;
   const y=+cy.value,m=+cm.value;
   if(!title) return cErr.textContent="모임 이름을 적어 주세요.";
@@ -465,11 +489,13 @@ PAGES.join1=()=>`
     <label class="f">내 닉네임 <span class="muted">(멤버에게 보임, 실명 대신 별명 권장)</span></label>
     <input type="text" id="jn" placeholder="예: 철수 · 응답을 고칠 때는 비워도 됨" maxlength="12">
     ${pidField("jp","jRem")}
+    ${hpField("jhp")}
     <div class="err" id="jErr"></div>
     <button class="btn primary" onclick="join1Next(this)">다음: 가능한 날짜 고르기</button>
     ${lostNotice()}
   </div>`;
 function join1Next(btn){
+  if(hpFilled("jhp")) return go("fakedone");                                  // [ver2.2]
   const code=cleanMeetingCode(jc.value),pidIn=cleanPid(jp.value.trim()),remember=jRem.checked;
   let nick=jn.value.trim();
   if(!code) return jErr.textContent="모임코드를 넣어 주세요.";
@@ -695,6 +721,7 @@ PAGES.flash1=()=>{
     <label class="f">내 닉네임 <span class="muted">(멤버에게 보임, 실명 대신 별명 권장)</span></label>
     <input type="text" id="fn" placeholder="예: 총무" maxlength="12" value="${esc(S.fnick||"")}">
     ${pidField("fp","fRem")}
+    ${hpField("fhp")}
     <h3>1) 시간 후보 <span class="muted">(여러 개, 최대 12개)</span></h3>
     <p class="muted" style="margin-bottom:8px">지금보다 뒤의 시간만 고를 수 있어요. 고른 시간은 <b>총무도 모두 가능</b>으로 들어갑니다.</p>
     ${hoursChips(hs,S.hsel)}
@@ -721,6 +748,7 @@ AFTER.flash1=()=>{
   });
 };
 function createFlash(btn){
+  if(hpFilled("fhp")) return go("fakedone");                                  // [ver2.2]
   keepFlashQuiet();
   const title=(S.ftitle||"").trim(), nick=(S.fnick||"").trim();
   if(!title) return fErr.textContent="모임 이름을 적어 주세요.";
